@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#131235">
+  <meta name="description" content="Gestión de distribuidores, pedidos y comisiones recurrentes de soluciones digitales.">
+  <link rel="stylesheet" href="/static/styles.css">
+  <title>{% block title %}Team Índigo SaaS{% endblock %} · Team Índigo</title>
+</head>
+<body class="theme-{{ tenant.theme if tenant else 'indigo' }}">
+{% if user and not public_layout %}
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Navegación">
+    <div class="brand"><span class="brand-mark">✦</span><div><strong>TEAM ÍNDIGO<span class="brand-accent">.</span></strong><small>{{ "PLATAFORMA SAAS" if user.role == "superadmin" else (tenant.brand_name or tenant.name if tenant else "OPERACIÓN COMERCIAL") }}</small></div></div>
+    {% if user.role == "superadmin" %}<div class="nav-label">PLATAFORMA SAAS</div><nav class="nav"><a href="/plataforma" class="active"><span>▦</span> Empresas</a></nav>{% else %}<div class="nav-label">ESPACIO DE TRABAJO</div>
+    <nav class="nav">
+      <a class="{% if nav == 'panel' %}active{% endif %}" href="/panel"><span>▦</span> Resumen</a>
+      <a class="{% if nav == 'pedidos' %}active{% endif %}" href="/panel/pedidos"><span>▤</span> Mis pedidos</a>
+      <a class="{% if nav == 'clientes' %}active{% endif %}" href="/panel/clientes"><span>♙</span> Clientes</a>
+      <a class="{% if nav == 'renovaciones' %}active{% endif %}" href="/panel/renovaciones"><span>↻</span> Renovaciones</a>
+      <a class="{% if nav == 'comisiones' %}active{% endif %}" href="/panel/comisiones"><span>◉</span> Comisiones</a>
+    </nav>
+    {% if user.role == 'admin' %}
+    <div class="nav-label extra">ADMINISTRACIÓN</div>
+    <nav class="nav">
+      <a class="{% if nav == 'admin-pedidos' %}active{% endif %}" href="/admin/pedidos"><span>▣</span> Gestionar pedidos</a>
+      <a class="{% if nav == 'productos' %}active{% endif %}" href="/admin/productos"><span>◈</span> Catálogo y precios</a>
+      <a class="{% if nav == 'distribuidores' %}active{% endif %}" href="/admin/distribuidores"><span>♧</span> Distribuidores</a>
+      <a class="{% if nav == 'admin-comisiones' %}active{% endif %}" href="/admin/comisiones"><span>◎</span> Liquidar comisiones</a>
+    </nav>
+    {% endif %}
+    {% if user.role == 'admin' %}<div class="nav-label extra">CONFIGURACIÓN</div><nav class="nav"><a class="{% if nav == 'configuracion' %}active{% endif %}" href="/admin/configuracion"><span>✧</span> Mi marca</a></nav><div class="nav-label extra">SUSCRIPCIÓN</div><nav class="nav"><a class="{% if nav == 'suscripcion' %}active{% endif %}" href="/admin/suscripcion"><span>◇</span> Mi plan</a></nav>{% endif %}{% endif %}
+    <div class="sidebar-bottom"><div class="tiny">TU CUENTA</div><strong>{{ user.name }}</strong><span>{{ 'Superadministrador' if user.role == 'superadmin' else ('Administrador' if user.role == 'admin' else 'Distribuidor') }}</span><a href="/perfil">Mi perfil →</a></div>
+  </aside>
+  <div class="main-area">
+    <header class="topbar"><span class="topbar-title">{{ "TEAM ÍNDIGO / SAAS" if user.role == "superadmin" else ((tenant.name|upper) if tenant else "TEAM ÍNDIGO") ~ " / PLATAFORMA COMERCIAL" }}</span><div class="topbar-end"><span class="small-avatar">{{ user.name[:1]|upper }}</span><form method="post" action="/salir"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="text-button" type="submit">Salir</button></form></div></header>
+    <main class="content">
+      {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+      {% if notice %}<div class="alert success" role="status">{{ notice }}</div>{% endif %}
+      {% block body %}{% endblock %}
+    </main>
+    <footer class="footer">Team Índigo SaaS · Cada empresa gestiona de manera independiente sus productos y condiciones comerciales.</footer>
+  </div>
+</div>
+{% else %}
+<main>{% block public_body %}{% endblock %}</main>
+{% endif %}
+</body>
+</html>
