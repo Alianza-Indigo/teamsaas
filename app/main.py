@@ -38,7 +38,10 @@ from contextlib import asynccontextmanager
 async def lifespan(app):
     if COOKIE_SECURE and FORM_SECRET == 'local-dev-only-change-in-production':
         raise RuntimeError('FORM_SECRET debe configurarse para producción.')
-    if os.getenv('AUTO_CREATE_TABLES', 'false').lower() == 'true':
+    if os.getenv('BOOTSTRAP_ON_START', 'false').lower() == 'true':
+        from .bootstrap import bootstrap
+        bootstrap()
+    elif os.getenv('AUTO_CREATE_TABLES', 'false').lower() == 'true':
         Base.metadata.create_all(bind=engine)
     yield
 
