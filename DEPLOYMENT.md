@@ -46,3 +46,6 @@ No se incluyen Stripe, base de datos provisionada, dominio personalizado ni conf
 - Las rutas dinamicas responden con HTTP 503 de mantenimiento sin importar `app.main` ni abrir SQLite cuando falta PostgreSQL o `FORM_SECRET`.
 - **Para habilitar la app real**: provisionar Neon, establecer `DATABASE_URL` de PostgreSQL y `FORM_SECRET` fuerte y persistente; inicializar DB con `python -m app.bootstrap` en un entorno administrativo seguro; confirmar su acceso; **entonces eliminar la regla de reescritura de la portada en `vercel.json`** y publicar una nueva version.
 - No desactivar las comprobaciones de arranque ni sustituir PostgreSQL por SQLite efimera en Vercel.
+
+
+La reescritura actual de Vercel redirige **todas** las rutas a `public/index.html` para evitar invocaciones de Python durante la puesta en servicio. Antes del lanzamiento es obligatorio retirarla y verificar las rutas autenticadas con Neon y los secretos ya establecidos.
