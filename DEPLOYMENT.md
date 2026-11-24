@@ -37,3 +37,12 @@ Antes de habilitar un despliegue funcional:
 - Probar login, permisos multiempresa, captura de pedidos, verificacion manual de pagos y comisiones en el dominio desplegado.
 
 No se incluyen Stripe, base de datos provisionada, dominio personalizado ni configuracion automatica de usuarios.
+
+
+## Proteccion temporal mientras faltan secretos o base de datos
+
+- La portada `/` muestra `public/index.html` desde la CDN por medio de `vercel.json`. No invoca Python por cada visita.
+- `/favicon.svg` y `/static/styles.css` son recursos estaticos servidos desde `public/`.
+- Las rutas dinamicas responden con HTTP 503 de mantenimiento sin importar `app.main` ni abrir SQLite cuando falta PostgreSQL o `FORM_SECRET`.
+- **Para habilitar la app real**: provisionar Neon, establecer `DATABASE_URL` de PostgreSQL y `FORM_SECRET` fuerte y persistente; inicializar DB con `python -m app.bootstrap` en un entorno administrativo seguro; confirmar su acceso; **entonces eliminar la regla de reescritura de la portada en `vercel.json`** y publicar una nueva version.
+- No desactivar las comprobaciones de arranque ni sustituir PostgreSQL por SQLite efimera en Vercel.
