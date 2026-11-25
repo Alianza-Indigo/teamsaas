@@ -20,10 +20,14 @@ def make_order(db, tenant_id, actor_id, distributor_id, product_id, customer_nam
         raise ValueError('Distribuidor no disponible en este espacio.')
     if not product or product.tenant_id != tenant_id or not valid_product(product):
         raise ValueError('Producto no disponible en este espacio.')
+    customer_email = normalize_email(customer_email)
     customer_name = customer_name.strip()
+    # Los distribuidores solo necesitan el correo. El nombre puede
+    # completarse después, sin inventar datos personales.
+    if not customer_name and actor.role == 'distribuidor':
+        customer_name = 'Cliente'
     if not 2 <= len(customer_name) <= 120:
         raise ValueError('Indica el nombre del cliente (2 a 120 caracteres).')
-    customer_email = normalize_email(customer_email)
     try:
         quantity = int(quantity)
     except (ValueError, TypeError, OverflowError) as exc:
@@ -41,8 +45,10 @@ def make_order(db, tenant_id, actor_id, distributor_id, product_id, customer_nam
         db.add(customer)
         db.flush()
     else:
-        customer.name = customer_name
-        customer.phone = phone.strip()
+        if customer_name != 'Cliente' or not customer.name:
+            customer.name = customer_name
+        if phone.strip():
+            customer.phone = phone.strip()
     # El importe y la comisión se congelan: cambios futuros al catálogo NO
     # alteran operaciones históricas ni las comisiones recurrentes asociadas.
     order = Order(tenant_id=tenant_id, code='TI-' + secrets.token_hex(8).upper(),
