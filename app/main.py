@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from .db import Base, SessionLocal, engine, get_db
-from .models import Audit, Commission, Customer, Order, Payment, Product, Session as LoginSession, User, Tenant, TenantSubscription, TenantCharge, SaasPlan, now
+from .models import Audit, BankAccount, Commission, Customer, Order, Payment, Product, Session as LoginSession, User, Tenant, TenantSubscription, TenantCharge, SaasPlan, now
 from .security import SESSION_COOKIE, clear_session, create_session, hash_password, read_session, verify_password
 from .saas import seed_plans, create_tenant, access_enabled, ensure_quota, get_plan, get_subscription
 from .domain.common import INTERVALS, STATUSES, money, normalize_email, valid_product
@@ -364,7 +364,8 @@ def order_list(request: Request, db: Session = Depends(get_db)):
     user = login_required(request)
     scoped = [Order.tenant_id == user.tenant_id] + ([Order.distributor_id == user.id] if user.role != 'admin' else [])
     rows = db.execute(select(Order, Customer).join(Customer, Order.customer_id == Customer.id).where(*scoped).order_by(Order.created_at.desc()).limit(250)).all()
-    return page(request, 'orders.html', nav='pedidos', rows=rows)
+    accounts = [a for a in bank_accounts_for(db, user.tenant_id) if a.active]
+    return page(request, 'orders.html', nav='pedidos', rows=rows, accounts=accounts)
 
 
 @app.get('/panel/pedidos/nuevo')
@@ -584,7 +585,8 @@ async def toggle_distributor(request: Request, distributor_id: str, db: Session 
 def admin_orders(request: Request, db: Session = Depends(get_db)):
     admin_required(request)
     rows = db.execute(select(Order, Customer, User).join(Customer, Order.customer_id == Customer.id).join(User, Order.distributor_id == User.id).where(Order.tenant_id == request.state.user.tenant_id, Customer.tenant_id == request.state.user.tenant_id, User.tenant_id == request.state.user.tenant_id).order_by(Order.created_at.desc()).limit(250)).all()
-    return page(request, 'admin_orders.html', nav='admin-pedidos', rows=rows)
+    accounts = [a for a in bank_accounts_for(db, request.state.user.tenant_id) if a.active]
+    return page(request, 'admin_orders.html', nav='admin-pedidos', rows=rows, accounts=accounts)
 
 
 @app.post('/admin/pedidos/{order_id}/estado')
@@ -711,7 +713,8 @@ def tenant_billing(request: Request, db: Session = Depends(get_db)):
         'productos': db.scalar(select(func.count()).select_from(Product).where(Product.tenant_id == user.tenant_id)) or 0,
         'pedidos_mes': db.scalar(select(func.count()).select_from(Order).where(Order.tenant_id == user.tenant_id, Order.created_at >= now().replace(day=1, hour=0, minute=0, second=0, microsecond=0))) or 0,
     }
-    return page(request, 'subscription.html', nav='suscripcion', subscription=sub, plan=plan, charges=charges, counts=counts)
+    accounts = [a for a in bank_accounts_for(db, None) if a.active]
+    return page(request, 'subscription.html', nav='suscripcion', subscription=sub, plan=plan, charges=charges, counts=counts, accounts=accounts)
 
 
 def platform_data(db):
@@ -889,6 +892,119 @@ async def platform_record_charge(request: Request, tenant_id: str, db: Session =
     except ValueError as exc:
         return redirect('/plataforma?' + urlencode({'error': str(exc)}))
     return redirect('/plataforma?cobro=registrado')
+
+
+
+def bank_accounts_for(db, tenant_id):
+    # checkfirst makes deployment compatible with existing Neon databases.
+    # Only the newly introduced table is created; existing data is untouched.
+    BankAccount.__table__.create(bind=engine, checkfirst=True)
+    scope = BankAccount.tenant_id.is_(None) if tenant_id is None else BankAccount.tenant_id == tenant_id
+    return db.scalars(select(BankAccount).where(scope).order_by(BankAccount.created_at.desc())).all()
+
+
+def bank_account_page(request, db, platform=False, error=None, status=200):
+    actor = platform_required(request) if platform else admin_required(request)
+    scope = None if platform else actor.tenant_id
+    return page(request, 'bank_accounts.html', nav='bancos-plataforma' if platform else 'bancos',
+                accounts=bank_accounts_for(db, scope), platform=platform, error=error, status=status)
+
+
+def validate_bank_form(form):
+    import re
+    bank = get_form_value(form, 'bank', 120)
+    holder = get_form_value(form, 'holder', 140)
+    clabe = get_form_value(form, 'clabe', 18).replace(' ', '')
+    account_number = get_form_value(form, 'account_number', 40)
+    currency = get_form_value(form, 'currency', 3)
+    instructions = get_form_value(form, 'instructions', 300)
+    if len(bank) < 2 or len(holder) < 2:
+        raise ValueError('Indica el banco y el nombre del titular.')
+    if not clabe and not account_number:
+        raise ValueError('Indica una CLABE o número de cuenta.')
+    if clabe and not re.fullmatch(r'\\d{18}', clabe):
+        raise ValueError('La CLABE debe contener exactamente 18 dígitos.')
+    if account_number and not re.fullmatch(r'[0-9A-Za-z -]{4,40}', account_number):
+        raise ValueError('Número de cuenta inválido.')
+    if currency not in ('MXN', 'USD'):
+        raise ValueError('Moneda no admitida.')
+    return bank, holder, clabe, account_number, currency, instructions
+
+
+@app.get('/plataforma/cuentas-bancarias')
+def platform_bank_accounts(request: Request, db: Session = Depends(get_db)):
+    return bank_account_page(request, db, platform=True)
+
+
+@app.post('/plataforma/cuentas-bancarias')
+async def platform_save_bank_account(request: Request, db: Session = Depends(get_db)):
+    return await save_bank_account(request, db, platform=True)
+
+
+@app.post('/plataforma/cuentas-bancarias/{account_id}/estado')
+async def platform_bank_account_status(request: Request, account_id: str, db: Session = Depends(get_db)):
+    return await toggle_bank_account(request, db, account_id, platform=True)
+
+
+@app.get('/admin/cuentas-bancarias')
+def tenant_bank_accounts(request: Request, db: Session = Depends(get_db)):
+    return bank_account_page(request, db)
+
+
+@app.post('/admin/cuentas-bancarias')
+async def tenant_save_bank_account(request: Request, db: Session = Depends(get_db)):
+    return await save_bank_account(request, db)
+
+
+@app.post('/admin/cuentas-bancarias/{account_id}/estado')
+async def tenant_bank_account_status(request: Request, account_id: str, db: Session = Depends(get_db)):
+    return await toggle_bank_account(request, db, account_id)
+
+
+async def save_bank_account(request, db, platform=False):
+    actor = platform_required(request) if platform else admin_required(request)
+    form = await request.form()
+    verify_csrf(request, form)
+    scope = None if platform else actor.tenant_id
+    try:
+        bank, holder, clabe, account_number, currency, instructions = validate_bank_form(form)
+        account_id = get_form_value(form, 'id', 36)
+        bank_accounts_for(db, scope)
+        account = db.get(BankAccount, account_id) if account_id else None
+        if account_id and (not account or account.tenant_id != scope):
+            raise ValueError('Cuenta bancaria no encontrada.')
+        if not account:
+            account = BankAccount(tenant_id=scope)
+        account.bank = bank
+        account.holder = holder
+        account.clabe = clabe
+        account.account_number = account_number
+        account.currency = currency
+        account.instructions = instructions
+        db.add(account)
+        db.flush()
+        db.add(Audit(tenant_id=scope, actor_id=actor.id,
+                     action='bank_account.saved', entity_type='bank_account', entity_id=account.id))
+        db.commit()
+        return redirect(('/plataforma' if platform else '/admin') + '/cuentas-bancarias?guardado=1')
+    except ValueError as exc:
+        return bank_account_page(request, db, platform=platform, error=str(exc), status=400)
+
+
+async def toggle_bank_account(request, db, account_id, platform=False):
+    actor = platform_required(request) if platform else admin_required(request)
+    form = await request.form()
+    verify_csrf(request, form)
+    scope = None if platform else actor.tenant_id
+    bank_accounts_for(db, scope)
+    account = db.get(BankAccount, account_id)
+    if not account or account.tenant_id != scope:
+        raise HTTPException(status_code=404)
+    account.active = not account.active
+    db.add(Audit(tenant_id=scope, actor_id=actor.id, action='bank_account.toggled',
+                 entity_type='bank_account', entity_id=account.id, detail=str(account.active)))
+    db.commit()
+    return redirect(('/plataforma' if platform else '/admin') + '/cuentas-bancarias')
 
 
 @app.get('/admin/configuracion')
