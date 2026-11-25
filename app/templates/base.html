@@ -12,24 +12,38 @@
 <div class="app-shell">
   <aside class="sidebar" aria-label="Navegación">
     <div class="brand"><span class="brand-mark">✦</span><div><strong>TEAM ÍNDIGO<span class="brand-accent">.</span></strong><small>{{ "PLATAFORMA SAAS" if user.role == "superadmin" else (tenant.brand_name or tenant.name if tenant else "OPERACIÓN COMERCIAL") }}</small></div></div>
-    {% if user.role == "superadmin" %}<div class="nav-label">PLATAFORMA SAAS</div><nav class="nav"><a href="/plataforma" class="{% if nav == 'empresas' %}active{% endif %}"><span>▦</span> Empresas</a><a href="/plataforma/planes" class="{% if nav == 'planes' %}active{% endif %}"><span>◇</span> Planes y precios</a></nav>{% else %}<div class="nav-label">ESPACIO DE TRABAJO</div>
+    {% if user.role == 'superadmin' %}
+    <div class="nav-label">PLATAFORMA SAAS</div>
     <nav class="nav">
-      <a class="{% if nav == 'panel' %}active{% endif %}" href="/panel"><span>▦</span> Resumen</a>
-      <a class="{% if nav == 'pedidos' %}active{% endif %}" href="/panel/pedidos"><span>▤</span> Mis pedidos</a>
+      <a href="/plataforma" class="{% if nav == 'empresas' %}active{% endif %}"><span>▦</span> Empresas</a>
+      <a href="/plataforma/planes" class="{% if nav == 'planes' %}active{% endif %}"><span>◇</span> Planes y precios</a>
+    </nav>
+    {% elif user.role == 'admin' %}
+    <div class="nav-label">ADMINISTRACIÓN DE EMPRESA</div>
+    <nav class="nav">
+      <a class="{% if nav == 'panel' %}active{% endif %}" href="/panel"><span>▦</span> Resumen general</a>
+      <a class="{% if nav == 'admin-pedidos' %}active{% endif %}" href="/admin/pedidos"><span>▣</span> Gestionar pedidos</a>
       <a class="{% if nav == 'clientes' %}active{% endif %}" href="/panel/clientes"><span>♙</span> Clientes</a>
       <a class="{% if nav == 'renovaciones' %}active{% endif %}" href="/panel/renovaciones"><span>↻</span> Renovaciones</a>
-      <a class="{% if nav == 'comisiones' %}active{% endif %}" href="/panel/comisiones"><span>◉</span> Comisiones</a>
-    </nav>
-    {% if user.role == 'admin' %}
-    <div class="nav-label extra">ADMINISTRACIÓN</div>
-    <nav class="nav">
-      <a class="{% if nav == 'admin-pedidos' %}active{% endif %}" href="/admin/pedidos"><span>▣</span> Gestionar pedidos</a>
+      <a class="{% if nav == 'admin-comisiones' %}active{% endif %}" href="/admin/comisiones"><span>◎</span> Liquidar comisiones</a>
       <a class="{% if nav == 'productos' %}active{% endif %}" href="/admin/productos"><span>◈</span> Catálogo y precios</a>
       <a class="{% if nav == 'distribuidores' %}active{% endif %}" href="/admin/distribuidores"><span>♧</span> Distribuidores</a>
-      <a class="{% if nav == 'admin-comisiones' %}active{% endif %}" href="/admin/comisiones"><span>◎</span> Liquidar comisiones</a>
+    </nav>
+    <div class="nav-label extra">CONFIGURACIÓN DE EMPRESA</div>
+    <nav class="nav">
+      <a class="{% if nav == 'configuracion' %}active{% endif %}" href="/admin/configuracion"><span>✧</span> Mi marca</a>
+      <a class="{% if nav == 'suscripcion' %}active{% endif %}" href="/admin/suscripcion"><span>◇</span> Mi plan</a>
+    </nav>
+    {% elif user.role == 'distribuidor' %}
+    <div class="nav-label">MI ACTIVIDAD COMERCIAL</div>
+    <nav class="nav">
+      <a class="{% if nav == 'panel' %}active{% endif %}" href="/panel"><span>▦</span> Mi resumen</a>
+      <a class="{% if nav == 'pedidos' %}active{% endif %}" href="/panel/pedidos"><span>▤</span> Mis pedidos</a>
+      <a class="{% if nav == 'clientes' %}active{% endif %}" href="/panel/clientes"><span>♙</span> Mis clientes</a>
+      <a class="{% if nav == 'renovaciones' %}active{% endif %}" href="/panel/renovaciones"><span>↻</span> Mis renovaciones</a>
+      <a class="{% if nav == 'comisiones' %}active{% endif %}" href="/panel/comisiones"><span>◉</span> Mis comisiones</a>
     </nav>
     {% endif %}
-    {% if user.role == 'admin' %}<div class="nav-label extra">CONFIGURACIÓN</div><nav class="nav"><a class="{% if nav == 'configuracion' %}active{% endif %}" href="/admin/configuracion"><span>✧</span> Mi marca</a></nav><div class="nav-label extra">SUSCRIPCIÓN</div><nav class="nav"><a class="{% if nav == 'suscripcion' %}active{% endif %}" href="/admin/suscripcion"><span>◇</span> Mi plan</a></nav>{% endif %}{% endif %}
     <div class="sidebar-bottom"><div class="tiny">TU CUENTA</div><strong>{{ user.name }}</strong><span>{{ 'Superadministrador' if user.role == 'superadmin' else ('Administrador' if user.role == 'admin' else 'Distribuidor') }}</span><a href="/perfil">Mi perfil →</a></div>
   </aside>
   <div class="main-area">
