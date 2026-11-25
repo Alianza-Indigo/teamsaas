@@ -151,6 +151,104 @@ def login_page(request: Request):
     return response
 
 
+
+@app.get('/recuperar-contrasena')
+def password_recovery_page(request: Request):
+    nonce = secrets.token_urlsafe(28)
+    response = page(request, 'forgot_password.html', login_csrf=nonce,
+                    workspace=request.query_params.get('espacio', 'team-indigo')[:63])
+    response.set_cookie('login_csrf', nonce, httponly=True, secure=COOKIE_SECURE,
+                        samesite='strict', max_age=1800)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.post('/recuperar-contrasena')
+async def password_recovery_request(request: Request, db: Session = Depends(get_db)):
+    from .password_reset import mail_configured, make_reset_token, send_reset_email
+    form = await request.form()
+    csrf_token = request.cookies.get('login_csrf', '')
+    if not csrf_token or not hmac.compare_digest(csrf_token, str(form.get('login_csrf', ''))):
+        raise HTTPException(status_code=403, detail='Formulario vencido.')
+    workspace = get_form_value(form, 'workspace', 63).lower()
+    try:
+        email = normalize_email(get_form_value(form, 'email', 254))
+    except ValueError:
+        email = ''
+    if not mail_configured():
+        return page(request, 'forgot_password.html', login_csrf=csrf_token, workspace=workspace,
+                    error='El envío de correo todavía no está configurado. Contacta al administrador.', status=503)
+    tenant = db.scalar(select(Tenant).where(Tenant.slug == workspace)) if workspace != 'plataforma' else None
+    user = db.scalar(select(User).where(User.tenant_id == tenant.id, User.email == email,
+                            User.active.is_(True))) if tenant and access_enabled(db, tenant.id) else None
+    if user and user.role != 'superadmin':
+        recent = db.scalar(select(Audit.id).where(
+            Audit.actor_id == user.id, Audit.action == 'password.reset_requested',
+            Audit.created_at >= now() - timedelta(minutes=5)).limit(1))
+        if not recent:
+            token = make_reset_token(user, FORM_SECRET)
+            url = os.getenv('PUBLIC_BASE_URL', 'https://ezteams.xyz').rstrip('/') + '/restablecer-contrasena?token=' + token
+            try:
+                send_reset_email(user.email, url)
+            except RuntimeError:
+                pass  # Avoid revealing whether a registered account exists.
+            else:
+                db.add(Audit(tenant_id=user.tenant_id, actor_id=user.id,
+                             action='password.reset_requested', entity_type='user', entity_id=user.id))
+                db.commit()
+    return page(request, 'forgot_password.html', login_csrf=csrf_token, workspace=workspace,
+                notice='Si la cuenta existe, recibirás un enlace para restablecer la contraseña.')
+
+
+@app.get('/restablecer-contrasena')
+def password_reset_page(request: Request, token: str = '', db: Session = Depends(get_db)):
+    from .password_reset import verify_reset_token
+    uid = token.split('.', 1)[0] if len(token) <= 200 else ''
+    user = db.get(User, uid) if len(uid) == 36 else None
+    valid = bool(user and user.active and user.tenant_id is not None
+                 and access_enabled(db, user.tenant_id)
+                 and verify_reset_token(token, user, FORM_SECRET))
+    nonce = secrets.token_urlsafe(28)
+    response = page(request, 'reset_password.html', login_csrf=nonce,
+                    token=token if valid else '', valid=valid, status=200 if valid else 400)
+    response.set_cookie('login_csrf', nonce, httponly=True, secure=COOKIE_SECURE,
+                        samesite='strict', max_age=1800)
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    return response
+
+
+@app.post('/restablecer-contrasena')
+async def password_reset_submit(request: Request, db: Session = Depends(get_db)):
+    from .password_reset import verify_reset_token
+    form = await request.form()
+    csrf_token = request.cookies.get('login_csrf', '')
+    if not csrf_token or not hmac.compare_digest(csrf_token, str(form.get('login_csrf', ''))):
+        raise HTTPException(status_code=403, detail='Formulario vencido.')
+    token = get_form_value(form, 'token', 200)
+    uid = token.split('.', 1)[0] if len(token) <= 200 else ''
+    user = db.get(User, uid) if len(uid) == 36 else None
+    if not user or not user.active or user.tenant_id is None or not access_enabled(db, user.tenant_id) or not verify_reset_token(token, user, FORM_SECRET):
+        return page(request, 'reset_password.html', login_csrf=csrf_token, token='',
+                    valid=False, error='Enlace vencido o utilizado.', status=400)
+    password = get_form_value(form, 'password', 1000)
+    if password != get_form_value(form, 'confirm', 1000):
+        return page(request, 'reset_password.html', login_csrf=csrf_token, token=token,
+                    valid=True, error='Las contraseñas no coinciden.', status=400)
+    try:
+        new_hash = hash_password(password)
+    except ValueError as exc:
+        return page(request, 'reset_password.html', login_csrf=csrf_token, token=token,
+                    valid=True, error=str(exc), status=400)
+    user.password_hash = new_hash
+    user.must_change_password = False
+    db.execute(LoginSession.__table__.delete().where(LoginSession.user_id == user.id))
+    db.add(Audit(tenant_id=user.tenant_id, actor_id=user.id,
+                 action='password.reset_completed', entity_type='user', entity_id=user.id))
+    db.commit()
+    return redirect('/ingresar?' + urlencode({'espacio': db.get(Tenant, user.tenant_id).slug, 'recuperada': '1'}))
+
+
 @app.post('/ingresar')
 async def login_post(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
