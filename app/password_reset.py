@@ -1,5 +1,6 @@
 """Single-use, time-limited password reset links for tenant accounts."""
 import hashlib
+import logging
 import hmac
 import json
 import os
@@ -8,6 +9,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+logger = logging.getLogger('ezteams.password_reset')
 RESET_TTL_SECONDS = 1800
 
 
@@ -63,8 +65,20 @@ def send_reset_email(recipient: str, url: str):
         method="POST",
     )
     try:
-        with urlopen(request, timeout=12) as response:
+        with urlopen(request, timeout=8) as response:
             if response.status < 200 or response.status >= 300:
                 raise RuntimeError("El proveedor rechazó el correo.")
-    except (HTTPError, URLError, TimeoutError) as exc:
-        raise RuntimeError("No fue posible enviar el correo de recuperación.") from exc
+            logger.info("Resend accepted the recovery message (HTTP %s).", response.status)
+    except HTTPError as exc:
+        # Status/error type only. Never log address, reset URL, or API key.
+        error_type = "unknown"
+        try:
+            data = json.loads(exc.read(2048).decode('utf-8'))
+            error_type = str(data.get("name", data.get("error", "unknown")))[:64]
+        except (ValueError, UnicodeError):
+            pass
+        logger.error("Resend rejected password recovery: HTTP %s, type=%s", exc.code, error_type)
+        raise RuntimeError("El proveedor de correo rechazó el envío.") from exc
+    except (URLError, TimeoutError) as exc:
+        logger.error("Resend could not be reached: %s", type(exc).__name__)
+        raise RuntimeError("No fue posible contactar al proveedor de correo.") from exc
