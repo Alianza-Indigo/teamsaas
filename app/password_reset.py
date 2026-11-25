@@ -62,7 +62,9 @@ def send_reset_email(recipient: str, url: str):
         "https://api.resend.com/emails",
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         headers={"Authorization": "Bearer " + os.environ["RESEND_API_KEY"],
-                 "Content-Type": "application/json"},
+                 "Content-Type": "application/json",
+                 "User-Agent": "EZTeams/1.0 (transactional-email; https://ezteams.xyz)",
+                 "Accept": "application/json"},
         method="POST",
     )
     try:
