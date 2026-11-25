@@ -384,10 +384,12 @@ async def order_create(request: Request, db: Session = Depends(get_db)):
     try:
         distributor_id = user.id
         if user.role == 'admin':
-            distributor_id = get_form_value(form, 'distributor_id', 36)
+            distributor_id = get_form_value(form, 'distributor_id', 36) or user.id
             distributor = db.get(User, distributor_id)
-            if not distributor or distributor.tenant_id != user.tenant_id or distributor.role != 'distribuidor' or not distributor.active:
-                raise ValueError('Selecciona un distribuidor activo para registrar el pedido.')
+            if not distributor or distributor.tenant_id != user.tenant_id or not distributor.active or (
+                distributor.id != user.id and distributor.role != 'distribuidor'
+            ):
+                raise ValueError('Selecciona tu cartera o un distribuidor activo para registrar el pedido.')
         order = make_order(db, user.tenant_id, user.id, distributor_id, get_form_value(form, 'product_id', 36),
                            get_form_value(form, 'customer_name', 120), get_form_value(form, 'customer_email', 254),
                            get_form_value(form, 'phone', 50), get_form_value(form, 'quantity', 4),
@@ -404,6 +406,36 @@ def customers(request: Request, db: Session = Depends(get_db)):
     scoped = [Customer.tenant_id == user.tenant_id] + ([Customer.distributor_id == user.id] if user.role != 'admin' else [])
     rows = db.scalars(select(Customer).where(*scoped).order_by(Customer.created_at.desc()).limit(250)).all()
     return page(request, 'customers.html', nav='clientes', rows=rows)
+
+
+@app.post('/admin/clientes')
+async def admin_create_customer(request: Request, db: Session = Depends(get_db)):
+    admin = admin_required(request)
+    form = await request.form()
+    verify_csrf(request, form)
+    try:
+        name = get_form_value(form, 'name', 120)
+        email = normalize_email(get_form_value(form, 'email', 254))
+        phone = get_form_value(form, 'phone', 50)
+        if len(name) < 2:
+            raise ValueError('El nombre del cliente debe contener al menos dos caracteres.')
+        existing = db.scalar(select(Customer).where(
+            Customer.tenant_id == admin.tenant_id,
+            Customer.distributor_id == admin.id, Customer.email == email))
+        if existing:
+            raise ValueError('Ese cliente ya pertenece a tu cartera.')
+        customer = Customer(tenant_id=admin.tenant_id, distributor_id=admin.id,
+                            name=name, email=email, phone=phone)
+        db.add(customer)
+        db.flush()
+        db.add(Audit(tenant_id=admin.tenant_id, actor_id=admin.id,
+                     action='customer.created', entity_type='customer', entity_id=customer.id))
+        db.commit()
+        return redirect('/panel/clientes?creado=1')
+    except ValueError as exc:
+        rows = db.scalars(select(Customer).where(Customer.tenant_id == admin.tenant_id)
+                          .order_by(Customer.created_at.desc()).limit(250)).all()
+        return page(request, 'customers.html', nav='clientes', rows=rows, error=str(exc), status=400)
 
 
 @app.get('/panel/comisiones')
