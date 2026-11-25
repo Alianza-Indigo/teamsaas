@@ -163,11 +163,22 @@ async def login_post(request: Request, db: Session = Depends(get_db)):
     password = get_form_value(form, 'password', 1000)
     workspace = get_form_value(form, 'workspace', 63).lower()
     tenant = db.scalar(select(Tenant).where(Tenant.slug == workspace)) if workspace != 'plataforma' else None
-    if workspace == 'plataforma':
+    if workspace == 'plataforma' and os.getenv('SUPERADMIN_EMAIL') and os.getenv('SUPERADMIN_PASSWORD'):
+        configured_email = os.environ['SUPERADMIN_EMAIL'].strip().lower()
+        configured_password = os.environ['SUPERADMIN_PASSWORD']
+        credentials_ok = (
+            hmac.compare_digest(email, configured_email)
+            and hmac.compare_digest(password, configured_password)
+        )
+        user = db.scalar(select(User).where(User.tenant_id.is_(None), User.role == 'superadmin', User.active.is_(True))) if credentials_ok else None
+    elif workspace == 'plataforma':
+        # Legacy local bootstrap credentials; production uses SUPERADMIN_*.
         user = db.scalar(select(User).where(User.email == email, User.tenant_id.is_(None), User.role == 'superadmin', User.active.is_(True)))
+        credentials_ok = bool(user and verify_password(password, user.password_hash))
     else:
         user = db.scalar(select(User).where(User.email == email, User.tenant_id == tenant.id, User.active.is_(True))) if tenant and access_enabled(db, tenant.id) else None
-    if not user or not verify_password(password, user.password_hash):
+        credentials_ok = bool(user and verify_password(password, user.password_hash))
+    if not user or not credentials_ok:
         return page(request, 'login.html', error='Correo o contraseña incorrectos.', login_csrf=token, workspace=workspace, status=401)
     raw = create_session(db, user)
     response = redirect('/perfil' if user.must_change_password else ('/plataforma' if user.role == 'superadmin' else '/panel'))
