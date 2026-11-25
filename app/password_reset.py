@@ -1,6 +1,7 @@
 """Single-use, time-limited password reset links for tenant accounts."""
 import hashlib
 import logging
+import re
 import hmac
 import json
 import os
@@ -72,12 +73,15 @@ def send_reset_email(recipient: str, url: str):
     except HTTPError as exc:
         # Status/error type only. Never log address, reset URL, or API key.
         error_type = "unknown"
+        error_reason = "unspecified"
         try:
             data = json.loads(exc.read(2048).decode('utf-8'))
             error_type = str(data.get("name", data.get("error", "unknown")))[:64]
+            reason = str(data.get("message", "unspecified"))
+            error_reason = re.sub(r"[\\w.+-]+@[\\w.-]+", "[redacted-email]", reason)[:250]
         except (ValueError, UnicodeError):
             pass
-        logger.error("Resend rejected password recovery: HTTP %s, type=%s", exc.code, error_type)
+        logger.error("Resend rejected password recovery: HTTP %s, type=%s, message=%s", exc.code, error_type, error_reason)
         raise RuntimeError("El proveedor de correo rechazó el envío.") from exc
     except (URLError, TimeoutError) as exc:
         logger.error("Resend could not be reached: %s", type(exc).__name__)
