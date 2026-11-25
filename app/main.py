@@ -619,46 +619,6 @@ async def admin_record_payment(request: Request, order_id: str, db: Session = De
     return redirect('/admin/pedidos?pago=registrado')
 
 
-@app.get('/_mantenimiento_comisiones_20261125')
-def temporary_pending_commissions_update(key: str = '', apply: str = '0', db: Session = Depends(get_db)):
-    """Temporary, token-gated audit and correction. Remove after execution."""
-    expected = os.getenv('PENDING_COMMISSION_MAINTENANCE_KEY', '')
-    if not expected or not hmac.compare_digest(key, expected):
-        raise HTTPException(status_code=404)
-    from .domain.common import commission_cents
-    rows = db.execute(
-        select(Commission, Order, Payment, Product)
-        .join(Order, (Order.id == Commission.order_id) & (Order.tenant_id == Commission.tenant_id))
-        .join(Payment, (Payment.id == Commission.payment_id) & (Payment.tenant_id == Commission.tenant_id))
-        .join(Product, (Product.id == Order.product_id) & (Product.tenant_id == Order.tenant_id))
-        .where(Commission.status == 'PENDIENTE')
-        .with_for_update(of=Commission)
-    ).all()
-    changes = []
-    by_tenant = {}
-    for c, order, payment, product in rows:
-        expected_cents = commission_cents(payment.amount_cents, product.commission_bps)
-        if c.amount_cents == expected_cents:
-            continue
-        changes.append((c, expected_cents))
-        k = str(c.tenant_id)
-        if k not in by_tenant:
-            by_tenant[k] = {'count': 0, 'old_cents': 0, 'new_cents': 0}
-        by_tenant[k]['count'] += 1
-        by_tenant[k]['old_cents'] += c.amount_cents
-        by_tenant[k]['new_cents'] += expected_cents
-    if apply == '1':
-        for c, target in changes:
-            before = c.amount_cents
-            c.amount_cents = target
-            db.add(Audit(tenant_id=c.tenant_id, actor_id='system-maintenance',
-                         action='commission.pending_recalculated', entity_type='commission', entity_id=c.id,
-                         detail=f'previous_cents={before};new_cents={target};source=current_product_percentage'))
-        db.commit()
-    return {'applied': apply == '1', 'pending_total': len(rows),
-            'modified_count': len(changes), 'by_tenant': list(by_tenant.values())}
-
-
 @app.get('/admin/comisiones')
 def admin_commissions(request: Request, db: Session = Depends(get_db)):
     admin_required(request)
