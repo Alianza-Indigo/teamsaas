@@ -391,9 +391,11 @@ async def order_create(request: Request, db: Session = Depends(get_db)):
             ):
                 raise ValueError('Selecciona tu cartera o un distribuidor activo para registrar el pedido.')
         order = make_order(db, user.tenant_id, user.id, distributor_id, get_form_value(form, 'product_id', 36),
-                           get_form_value(form, 'customer_name', 120), get_form_value(form, 'customer_email', 254),
-                           get_form_value(form, 'phone', 50), get_form_value(form, 'quantity', 4),
-                           get_form_value(form, 'note', 2000))
+                           get_form_value(form, 'customer_name', 120) if user.role == 'admin' else '',
+                           get_form_value(form, 'customer_email', 254),
+                           get_form_value(form, 'phone', 50) if user.role == 'admin' else '',
+                           get_form_value(form, 'quantity', 4) if user.role == 'admin' else '1',
+                           get_form_value(form, 'note', 2000) if user.role == 'admin' else '')
         return redirect('/panel/pedidos?creado=' + order.code)
     except (ValueError, TypeError) as exc:
         products = db.scalars(select(Product).where(Product.tenant_id == user.tenant_id, Product.active.is_(True)).order_by(Product.name)).all()
