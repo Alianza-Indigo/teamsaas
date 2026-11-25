@@ -102,6 +102,20 @@ class Product(Base):
     __table_args__ = (UniqueConstraint('tenant_id', 'id', name='uq_product_tenant_id'), CheckConstraint('commission_bps >= 0 AND commission_bps <= 10000'),)
 
 
+class BankAccount(Base):
+    __tablename__ = 'bank_accounts'
+    id = Column(String(36), primary_key=True, default=uid)
+    tenant_id = Column(String(36), ForeignKey('tenants.id'), nullable=True, index=True)
+    bank = Column(String(120), nullable=False)
+    holder = Column(String(140), nullable=False)
+    clabe = Column(String(18), nullable=False, default='')
+    account_number = Column(String(40), nullable=False, default='')
+    currency = Column(String(3), nullable=False, default='MXN')
+    instructions = Column(String(300), nullable=False, default='')
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, nullable=False, default=now)
+
+
 class Customer(Base):
     __tablename__ = 'customers'
     id = Column(String(36), primary_key=True, default=uid)
