@@ -169,8 +169,8 @@ def temporary_email_diagnostic(token: str = ''):
     from .password_reset import send_reset_email
     try:
         send_reset_email('contacto@alianzaindigo.org', 'https://ezteams.xyz/recuperar-contrasena?espacio=team-indigo')
-    except RuntimeError:
-        return {'accepted': False, 'detail': 'Consult server-side diagnostic log.'}
+    except RuntimeError as exc:
+        return {'accepted': False, 'detail': str(exc)[:300]}
     return {'accepted': True}
 
 
