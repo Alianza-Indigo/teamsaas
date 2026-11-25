@@ -74,13 +74,19 @@ def send_reset_email(recipient: str, url: str):
         # Status/error type only. Never log address, reset URL, or API key.
         error_type = "unknown"
         error_reason = "unspecified"
+        raw = exc.read(2048).decode('utf-8', errors='replace')
         try:
-            data = json.loads(exc.read(2048).decode('utf-8'))
-            error_type = str(data.get("name", data.get("error", "unknown")))[:64]
-            reason = str(data.get("message", "unspecified"))
-            error_reason = re.sub(r"[\\w.+-]+@[\\w.-]+", "[redacted-email]", reason)[:250]
-        except (ValueError, UnicodeError):
-            pass
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                error_type = str(data.get("name", data.get("error", "unknown")))[:64]
+                error_reason = str(data.get("message", "unspecified"))
+        except ValueError:
+            # Provider-side HTML/WAF errors are not JSON. Extract a short
+            # diagnostic snippet without persisting secrets or email addresses.
+            error_type = 'non_json_response'
+            error_reason = re.sub(r'<[^>]*>', ' ', raw)[:300]
+        error_reason = re.sub(r"[\\w.+-]+@[\\w.-]+", "[redacted-email]", error_reason)
+        error_reason = error_reason.replace(os.environ["RESEND_API_KEY"], "[redacted-secret]")[:250]
         logger.error("Resend rejected password recovery: HTTP %s, type=%s, message=%s", exc.code, error_type, error_reason)
         raise RuntimeError(f"Resend HTTP {exc.code}; {error_type}; {error_reason}") from exc
     except (URLError, TimeoutError) as exc:
