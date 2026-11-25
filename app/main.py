@@ -54,6 +54,11 @@ app.router.lifespan_context = lifespan
 
 @app.middleware('http')
 async def auth_middleware(request, call_next):
+    if os.getenv('SYNC_TEAM_INDIGO_ADMIN_EMAIL', 'false').lower() == 'true':
+        # One-time operational sync on a real request, including serverless
+        # runtimes that do not invoke the FastAPI lifespan callback.
+        from .bootstrap import update_team_indigo_admin_email
+        update_team_indigo_admin_email()
     request.state.user = None
     request.state.session = None
     request.state.tenant = None
@@ -194,13 +199,15 @@ async def password_recovery_request(request: Request, db: Session = Depends(get_
             try:
                 send_reset_email(user.email, url)
             except RuntimeError:
-                pass  # Avoid revealing whether a registered account exists.
+                # Do not disclose whether an address exists. The transport
+                # module logs a sanitized failure reason for operations.
+                pass
             else:
                 db.add(Audit(tenant_id=user.tenant_id, actor_id=user.id,
                              action='password.reset_requested', entity_type='user', entity_id=user.id))
                 db.commit()
     return page(request, 'forgot_password.html', login_csrf=csrf_token, workspace=workspace,
-                notice='Si la cuenta existe, recibirás un enlace para restablecer la contraseña.')
+                notice='Solicitud recibida. Si la cuenta está registrada y el correo puede enviarse, recibirás un enlace de recuperación.')
 
 
 @app.get('/restablecer-contrasena')
