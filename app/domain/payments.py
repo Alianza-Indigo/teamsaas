@@ -2,7 +2,7 @@
 import re
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from ..models import Order, Payment, Commission, now
+from ..models import Order, Payment, Commission, User, now
 from .common import actor_for, audit, commission_cents
 from .renewals import next_date, renewal_period
 
@@ -64,11 +64,14 @@ def record_payment(db, tenant_id, actor_id, order, reference, kind='INICIAL',
                       currency=current.currency, recorded_by=actor_id)
     db.add(payment)
     db.flush()
-    commission = Commission(tenant_id=tenant_id, order_id=current.id, payment_id=payment.id,
-                            distributor_id=current.distributor_id,
-                            amount_cents=commission_cents(total, current.commission_bps), currency=current.currency)
-    db.add(commission)
-    db.flush()
+    seller = db.get(User, current.distributor_id)
+    commission = None
+    if seller and seller.tenant_id == tenant_id and seller.role == 'distribuidor':
+        commission = Commission(tenant_id=tenant_id, order_id=current.id, payment_id=payment.id,
+                                distributor_id=current.distributor_id,
+                                amount_cents=commission_cents(total, current.commission_bps), currency=current.currency)
+        db.add(commission)
+        db.flush()
     if kind == 'INICIAL':
         current.paid_at = now()
         current.status = 'PAGADO'
@@ -81,7 +84,8 @@ def record_payment(db, tenant_id, actor_id, order, reference, kind='INICIAL',
                                     current.billing_interval, anchor_day=current.paid_at.day)
     audit(db, tenant_id, actor_id, 'payment.verified', 'payment', payment.id,
           f'{kind} {period_key} {reference}')
-    audit(db, tenant_id, actor_id, 'commission.generated', 'commission', commission.id, payment.id)
+    if commission:
+        audit(db, tenant_id, actor_id, 'commission.generated', 'commission', commission.id, payment.id)
     try:
         db.commit()
     except IntegrityError as exc:
