@@ -922,7 +922,7 @@ def validate_bank_form(form):
         raise ValueError('Indica el banco y el nombre del titular.')
     if not clabe and not account_number:
         raise ValueError('Indica una CLABE o número de cuenta.')
-    if clabe and not re.fullmatch(r'\\d{18}', clabe):
+    if clabe and not re.fullmatch('[0-9]{18}', clabe):
         raise ValueError('La CLABE debe contener exactamente 18 dígitos.')
     if account_number and not re.fullmatch(r'[0-9A-Za-z -]{4,40}', account_number):
         raise ValueError('Número de cuenta inválido.')
