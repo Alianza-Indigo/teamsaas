@@ -90,7 +90,7 @@ def send_reset_email(recipient: str, url: str):
         error_reason = re.sub(r"[\\w.+-]+@[\\w.-]+", "[redacted-email]", error_reason)
         error_reason = error_reason.replace(os.environ["RESEND_API_KEY"], "[redacted-secret]")[:250]
         logger.error("Resend rejected password recovery: HTTP %s, type=%s, message=%s", exc.code, error_type, error_reason)
-        raise RuntimeError(f"Resend HTTP {exc.code}; {error_type}; {error_reason}") from exc
+        raise RuntimeError("El proveedor rechazó el correo de recuperación.") from exc
     except (URLError, TimeoutError) as exc:
         logger.error("Resend could not be reached: %s", type(exc).__name__)
         raise RuntimeError("No fue posible contactar al proveedor de correo.") from exc
