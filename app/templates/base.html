@@ -12,7 +12,7 @@
 <div class="app-shell">
   <aside class="sidebar" aria-label="Navegación">
     <div class="brand"><span class="brand-mark">✦</span><div><strong>TEAM ÍNDIGO<span class="brand-accent">.</span></strong><small>{{ "PLATAFORMA SAAS" if user.role == "superadmin" else (tenant.brand_name or tenant.name if tenant else "OPERACIÓN COMERCIAL") }}</small></div></div>
-    {% if user.role == "superadmin" %}<div class="nav-label">PLATAFORMA SAAS</div><nav class="nav"><a href="/plataforma" class="active"><span>▦</span> Empresas</a></nav>{% else %}<div class="nav-label">ESPACIO DE TRABAJO</div>
+    {% if user.role == "superadmin" %}<div class="nav-label">PLATAFORMA SAAS</div><nav class="nav"><a href="/plataforma" class="{% if nav == 'empresas' %}active{% endif %}"><span>▦</span> Empresas</a><a href="/plataforma/planes" class="{% if nav == 'planes' %}active{% endif %}"><span>◇</span> Planes y precios</a></nav>{% else %}<div class="nav-label">ESPACIO DE TRABAJO</div>
     <nav class="nav">
       <a class="{% if nav == 'panel' %}active{% endif %}" href="/panel"><span>▦</span> Resumen</a>
       <a class="{% if nav == 'pedidos' %}active{% endif %}" href="/panel/pedidos"><span>▤</span> Mis pedidos</a>
