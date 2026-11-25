@@ -576,7 +576,7 @@ def platform_data(db):
 def platform_dashboard(request: Request, db: Session = Depends(get_db)):
     platform_required(request)
     rows, plans = platform_data(db)
-    return page(request, 'platform.html', nav='plataforma', rows=rows, plans=plans, mrr=monthly_recurring_revenue(db), active_count=sum(1 for t, sub, p in rows if t.active and sub.status in ('ACTIVA', 'TRIAL') and sub.ends_at >= now()))
+    return page(request, 'platform.html', nav='empresas', rows=rows, plans=plans, mrr=monthly_recurring_revenue(db), active_count=sum(1 for t, sub, p in rows if t.active and sub.status in ('ACTIVA', 'TRIAL') and sub.ends_at >= now()))
 
 
 @app.post('/plataforma/empresas')
@@ -598,6 +598,104 @@ async def platform_create_tenant(request: Request, db: Session = Depends(get_db)
         db.rollback()
         rows, plans = platform_data(db)
         return page(request, 'platform.html', nav='plataforma', rows=rows, plans=plans, mrr=monthly_recurring_revenue(db), active_count=sum(1 for t, sub, p in rows if t.active and sub.status in ('ACTIVA', 'TRIAL') and sub.ends_at >= now()), error=str(exc), status=400)
+
+
+@app.get('/plataforma/planes')
+def platform_plans(request: Request, db: Session = Depends(get_db)):
+    platform_required(request)
+    plans = db.scalars(select(SaasPlan).order_by(SaasPlan.price_cents, SaasPlan.name)).all()
+    return page(request, 'platform_plans.html', nav='planes', plans=plans)
+
+
+@app.post('/plataforma/planes')
+async def platform_save_plan(request: Request, db: Session = Depends(get_db)):
+    actor = platform_required(request)
+    form = await request.form()
+    verify_csrf(request, form)
+    try:
+        plan_id = get_form_value(form, 'id', 36)
+        plan = db.get(SaasPlan, plan_id) if plan_id else None
+        if plan_id and not plan:
+            raise ValueError('Plan inexistente.')
+        code = get_form_value(form, 'code', 32).lower()
+        name = get_form_value(form, 'name', 80)
+        from decimal import Decimal, InvalidOperation
+        from sqlalchemy.exc import IntegrityError
+        from .saas import valid_slug
+        if not 3 <= len(code) <= 32 or not valid_slug(code):
+            raise ValueError('Identificador del plan inválido.')
+        if not 2 <= len(name) <= 80:
+            raise ValueError('Nombre de plan inválido.')
+        currency = get_form_value(form, 'currency', 3)
+        if currency not in ('MXN', 'USD'):
+            raise ValueError('Moneda no admitida.')
+        try:
+            price = Decimal(get_form_value(form, 'price', 20))
+            if not price.is_finite() or price < 0 or price > 1000000 or price.as_tuple().exponent < -2:
+                raise ValueError('Precio inválido.')
+            distributors = int(get_form_value(form, 'max_distributors', 9))
+            products = int(get_form_value(form, 'max_products', 9))
+            orders = int(get_form_value(form, 'max_orders_month', 9))
+        except (ValueError, InvalidOperation, OverflowError) as exc:
+            raise ValueError('Revisa el precio y los límites del plan.') from exc
+        if not all(1 <= n <= 1000000 for n in (distributors, products, orders)):
+            raise ValueError('Los límites deben ser positivos y no exceder 1,000,000.')
+        duplicate = db.scalar(select(SaasPlan).where(SaasPlan.code == code))
+        if duplicate and (not plan or duplicate.id != plan.id):
+            raise ValueError('El identificador ya está en uso.')
+        if plan is None:
+            plan = SaasPlan(code=code)
+        else:
+            # Identifiers are stable once assigned; subscriptions use plan IDs.
+            if plan.code != code:
+                raise ValueError('El identificador no se puede cambiar.')
+        plan.name = name
+        plan.price_cents = int(price * 100)
+        plan.currency = currency
+        plan.max_distributors = distributors
+        plan.max_products = products
+        plan.max_orders_month = orders
+        plan.active = get_form_value(form, 'active', 5) == 'on'
+        db.add(plan)
+        db.flush()
+        db.add(Audit(tenant_id=None, actor_id=actor.id, action='platform.plan_saved', entity_type='saas_plan', entity_id=plan.id))
+        db.commit()
+        return redirect('/plataforma/planes?guardado=1')
+    except (ValueError, TypeError, IntegrityError) as exc:
+        db.rollback()
+        plans = db.scalars(select(SaasPlan).order_by(SaasPlan.price_cents, SaasPlan.name)).all()
+        return page(request, 'platform_plans.html', nav='planes', plans=plans, error=str(exc), status=400)
+
+
+@app.post('/plataforma/empresas/{tenant_id}/editar')
+async def platform_edit_tenant(request: Request, tenant_id: str, db: Session = Depends(get_db)):
+    actor = platform_required(request)
+    form = await request.form()
+    verify_csrf(request, form)
+    tenant = db.get(Tenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404)
+    try:
+        from .saas import valid_slug
+        name = get_form_value(form, 'name', 140)
+        slug = get_form_value(form, 'slug', 63).lower()
+        brand_name = get_form_value(form, 'brand_name', 140)
+        email = normalize_email(get_form_value(form, 'contact_email', 254))
+        if not 3 <= len(name) <= 140 or not 3 <= len(brand_name) <= 140 or not valid_slug(slug):
+            raise ValueError('Datos de empresa inválidos.')
+        if slug != tenant.slug and db.scalar(select(Tenant).where(Tenant.slug == slug)):
+            raise ValueError('El identificador de espacio ya existe.')
+        old_slug = tenant.slug
+        tenant.name = name
+        tenant.slug = slug
+        tenant.brand_name = brand_name
+        tenant.contact_email = email
+        db.add(Audit(tenant_id=None, actor_id=actor.id, action='platform.tenant_edited', entity_type='tenant', entity_id=tenant.id, detail=f'{old_slug} -> {slug}'))
+        db.commit()
+        return redirect('/plataforma?empresa=actualizada')
+    except (ValueError, TypeError) as exc:
+        db.rollback()
+        return redirect('/plataforma?' + urlencode({'error': str(exc)}))
 
 
 @app.post('/plataforma/empresas/{tenant_id}/estado')
