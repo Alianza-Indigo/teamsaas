@@ -498,9 +498,14 @@ async def admin_product_save(request: Request, db: Session = Depends(get_db)):
             cents = int(price * 100)
         else:
             cents = None
-        bps = int(get_form_value(form, 'commission_bps', 5))
-        if not 0 <= bps <= 10000:
-            raise ValueError('Comisión fuera de rango.')
+        from decimal import Decimal, InvalidOperation
+        try:
+            percent = Decimal(get_form_value(form, 'commission_percent', 8))
+        except InvalidOperation as exc:
+            raise ValueError('El porcentaje de comisión no es válido.') from exc
+        if not percent.is_finite() or not 0 <= percent <= 100 or percent.as_tuple().exponent < -2:
+            raise ValueError('Introduce una comisión entre 0% y 100%, con máximo dos decimales.')
+        bps = int(percent * 100)
         product.name = name
         product.description = get_form_value(form, 'description', 700)
         product.currency = currency
