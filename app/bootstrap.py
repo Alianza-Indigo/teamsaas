@@ -28,6 +28,7 @@ def update_team_indigo_admin_email():
             raise RuntimeError('No se puede identificar de forma única al administrador de Team Índigo.')
         tenant.contact_email = new_email
         db.commit()
+        print('Team Indigo admin account email sync completed', flush=True)
 
 
 def bootstrap():
