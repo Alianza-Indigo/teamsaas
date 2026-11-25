@@ -160,6 +160,20 @@ def login_page(request: Request):
 
 
 
+@app.get('/_diagnostico-correo-temporal')
+def temporary_email_diagnostic(token: str = ''):
+    """Temporary one-recipient transport test. Remove immediately after diagnosis."""
+    expected = os.getenv('EMAIL_DIAGNOSTIC_TOKEN', '')
+    if not expected or not hmac.compare_digest(token, expected):
+        raise HTTPException(status_code=404)
+    from .password_reset import send_reset_email
+    try:
+        send_reset_email('contacto@alianzaindigo.org', 'https://ezteams.xyz/recuperar-contrasena?espacio=team-indigo')
+    except RuntimeError:
+        return {'accepted': False, 'detail': 'Consult server-side diagnostic log.'}
+    return {'accepted': True}
+
+
 @app.get('/recuperar-contrasena')
 def password_recovery_page(request: Request):
     nonce = secrets.token_urlsafe(28)
