@@ -39,6 +39,9 @@ from contextlib import asynccontextmanager
 async def lifespan(app):
     if COOKIE_SECURE and FORM_SECRET == 'local-dev-only-change-in-production':
         raise RuntimeError('FORM_SECRET debe configurarse para producción.')
+    if os.getenv('SYNC_TEAM_INDIGO_ADMIN_EMAIL', 'false').lower() == 'true':
+        from .bootstrap import update_team_indigo_admin_email
+        update_team_indigo_admin_email()
     if os.getenv('BOOTSTRAP_ON_START', 'false').lower() == 'true':
         from .bootstrap import bootstrap
         bootstrap()
