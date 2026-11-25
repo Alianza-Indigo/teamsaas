@@ -16,7 +16,7 @@ def make_order(db, tenant_id, actor_id, distributor_id, product_id, customer_nam
     ensure_quota(db, tenant_id, 'orders')
     distributor = db.get(User, distributor_id)
     product = db.get(Product, product_id)
-    if not distributor or distributor.tenant_id != tenant_id or not distributor.active or distributor.role != 'distribuidor':
+    if not distributor or distributor.tenant_id != tenant_id or not distributor.active or distributor.role not in ('distribuidor', 'admin') or (distributor.role == 'admin' and actor.id != distributor.id):
         raise ValueError('Distribuidor no disponible en este espacio.')
     if not product or product.tenant_id != tenant_id or not valid_product(product):
         raise ValueError('Producto no disponible en este espacio.')
@@ -50,7 +50,7 @@ def make_order(db, tenant_id, actor_id, distributor_id, product_id, customer_nam
                   product_id=product.id, product_name=product.name, quantity=quantity,
                   unit_price_cents=product.price_cents,
                   total_cents=quantity * product.price_cents, currency=product.currency,
-                  billing_interval=product.billing_interval, commission_bps=product.commission_bps,
+                  billing_interval=product.billing_interval, commission_bps=0 if distributor.role == 'admin' else product.commission_bps,
                   note=note.strip(), source=source)
     db.add(order)
     db.flush()
