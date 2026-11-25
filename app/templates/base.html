@@ -17,6 +17,7 @@
     <nav class="nav">
       <a href="/plataforma" class="{% if nav == 'empresas' %}active{% endif %}"><span>▦</span> Empresas</a>
       <a href="/plataforma/planes" class="{% if nav == 'planes' %}active{% endif %}"><span>◇</span> Planes y precios</a>
+      <a href="/plataforma/cuentas-bancarias" class="{% if nav == 'bancos-plataforma' %}active{% endif %}"><span>▤</span> Cuentas bancarias</a>
     </nav>
     {% elif user.role == 'admin' %}
     <div class="nav-label">ADMINISTRACIÓN DE EMPRESA</div>
@@ -32,6 +33,7 @@
     <div class="nav-label extra">CONFIGURACIÓN DE EMPRESA</div>
     <nav class="nav">
       <a class="{% if nav == 'configuracion' %}active{% endif %}" href="/admin/configuracion"><span>✧</span> Mi marca</a>
+      <a class="{% if nav == 'bancos' %}active{% endif %}" href="/admin/cuentas-bancarias"><span>▤</span> Cuentas bancarias</a>
       <a class="{% if nav == 'suscripcion' %}active{% endif %}" href="/admin/suscripcion"><span>◇</span> Mi plan</a>
     </nav>
     {% elif user.role == 'distribuidor' %}
