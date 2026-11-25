@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from .db import Base, SessionLocal, engine, get_db
 from .models import Audit, Commission, Customer, Order, Payment, Product, Session as LoginSession, User, Tenant, TenantSubscription, TenantCharge, SaasPlan, now
 from .security import SESSION_COOKIE, clear_session, create_session, hash_password, read_session, verify_password
@@ -620,7 +621,6 @@ async def platform_save_plan(request: Request, db: Session = Depends(get_db)):
         code = get_form_value(form, 'code', 32).lower()
         name = get_form_value(form, 'name', 80)
         from decimal import Decimal, InvalidOperation
-        from sqlalchemy.exc import IntegrityError
         from .saas import valid_slug
         if not 3 <= len(code) <= 32 or not valid_slug(code):
             raise ValueError('Identificador del plan inválido.')
