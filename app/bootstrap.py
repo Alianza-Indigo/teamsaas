@@ -9,6 +9,27 @@ from .services import normalize_email
 from .saas import seed_plans, create_tenant
 
 
+
+def update_team_indigo_admin_email():
+    """One-time change of the existing tenant administrator's login and contact email."""
+    new_email = normalize_email(os.environ['BOOTSTRAP_ADMIN_EMAIL'])
+    with SessionLocal() as db:
+        tenant = db.scalar(select(Tenant).where(Tenant.slug == 'team-indigo'))
+        if tenant is None:
+            raise RuntimeError('El espacio Team Índigo no existe.')
+        admins = db.scalars(select(User).where(User.tenant_id == tenant.id, User.role == 'admin')).all()
+        exact = [user for user in admins if user.email == new_email]
+        if exact:
+            admin = exact[0]
+        elif len(admins) == 1:
+            admin = admins[0]
+            admin.email = new_email
+        else:
+            raise RuntimeError('No se puede identificar de forma única al administrador de Team Índigo.')
+        tenant.contact_email = new_email
+        db.commit()
+
+
 def bootstrap():
     platform_email = normalize_email(os.environ['BOOTSTRAP_PLATFORM_EMAIL'])
     platform_password = os.environ['BOOTSTRAP_PLATFORM_PASSWORD']
