@@ -82,7 +82,7 @@ def send_reset_email(recipient: str, url: str):
         except (ValueError, UnicodeError):
             pass
         logger.error("Resend rejected password recovery: HTTP %s, type=%s, message=%s", exc.code, error_type, error_reason)
-        raise RuntimeError("El proveedor de correo rechazó el envío.") from exc
+        raise RuntimeError(f"Resend HTTP {exc.code}; {error_type}; {error_reason}") from exc
     except (URLError, TimeoutError) as exc:
         logger.error("Resend could not be reached: %s", type(exc).__name__)
         raise RuntimeError("No fue posible contactar al proveedor de correo.") from exc
